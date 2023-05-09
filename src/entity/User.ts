@@ -27,8 +27,8 @@ export class User extends BaseEntity {
   @Column("citext", { unique: true })
   username!: string;
 
-  @Column()
-  password!: string;
+  @Column({ nullable: true })
+  password?: string;
 
   @Column({ default: 0 })
   token_version!: number;

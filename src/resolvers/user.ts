@@ -19,6 +19,7 @@ import {
 } from "../utils/constants";
 import { sendEmail } from "../utils/sendEmail";
 import { isAuth } from "../middleware/isAuth";
+import { isGoogleAuth } from "../middleware/isGoogleAuth";
 import { AppDataSource } from "../data-source";
 import { createAccessToken, createRefreshToken, generateOTP } from "../utils/auth";
 
@@ -167,12 +168,85 @@ export class UserResolver {
   }
 
   @Mutation(() => AuthResponse)
+  @UseMiddleware(isGoogleAuth)
+  async registerWithGoogle(
+    @Arg("username") username: string,
+    @Ctx() { google_payload, res }: MyContext
+  ): Promise<AuthResponse> {
+    const email = google_payload!.google_email;
+    if (!email) {
+      return {
+        errors: [
+          {
+            field: "username",
+            message: `No Email Associated with Account`,
+          },
+        ],
+      };
+    }
+
+    let user;
+    try {
+      user = await User.create({
+        email: email,
+        username: username,
+        verified: true,
+      }).save();
+    } catch (err) {
+      console.error(err);
+      if (err.code === "23505") {
+        if (err.detail.includes("username")) {
+          return {
+            errors: [
+              {
+                field: "username",
+                message: `Username Taken`,
+              },
+            ],
+          };
+        }
+        if (err.detail.includes("email")) {
+          return {
+            errors: [
+              {
+                field: "username",
+                message: `Email in Use`,
+              },
+            ],
+          };
+        }
+      }
+    }
+
+    if (!user) {
+      return {
+        errors: [
+          {
+            field: "username",
+            message: `Server Error: Unable to Create User`,
+          },
+        ],
+      };
+    }
+
+    res.cookie("qid", createRefreshToken(user), { httpOnly: true, path: "/refresh_token" });
+
+    return {
+      user: user,
+      auth: {
+        access_token: createAccessToken(user),
+        expires_in: ACCESS_TOKEN_EXPIRES_IN,
+      },
+    };
+  }
+
+  @Mutation(() => AuthResponse)
   async login(
     @Arg("loginOptions") loginOptions: LoginInput,
     @Ctx() { res }: MyContext
   ): Promise<AuthResponse> {
     const user = await User.findOne({ where: { email: loginOptions.email } });
-    if (!user) {
+    if (!user || !user.password) {
       return {
         errors: [
           {
@@ -194,6 +268,35 @@ export class UserResolver {
         ],
       };
     }
+
+    res.cookie("qid", createRefreshToken(user), { httpOnly: true, path: "/refresh_token" });
+
+    return {
+      user: user,
+      auth: {
+        access_token: createAccessToken(user),
+        expires_in: ACCESS_TOKEN_EXPIRES_IN,
+      },
+    };
+  }
+
+  @Mutation(() => AuthResponse)
+  @UseMiddleware(isGoogleAuth)
+  async loginWithGoogle(@Ctx() { res, google_payload }: MyContext): Promise<AuthResponse> {
+    const email = google_payload!.google_email;
+    const user = await User.findOne({ where: { email: email } });
+    if (!user) {
+      return {
+        errors: [
+          {
+            field: "google",
+            message: "No Account Found",
+          },
+        ],
+      };
+    }
+
+    console.log("cookie set");
 
     res.cookie("qid", createRefreshToken(user), { httpOnly: true, path: "/refresh_token" });
 
@@ -271,7 +374,7 @@ export class UserResolver {
     @Ctx() { user_payload }: MyContext
   ): Promise<UserResponse> {
     const isValid = await argon2.verify(
-      user_payload!.user.password,
+      user_payload!.user.password!,
       changePasswordOptions.oldPassword
     );
     if (!isValid) {
@@ -442,6 +545,16 @@ export class UserResolver {
     const emailBody = `Your Token is: ${token}`;
 
     sendEmail(user_payload!.user.email, "REMASTER - VERIFY EMAIL", emailBody);
+
+    return true;
+  }
+
+  @Mutation(() => Boolean)
+  async logout(@Ctx() { res }: MyContext) {
+    res.cookie("qid", "", {
+      httpOnly: true,
+      path: "/refresh_token",
+    });
 
     return true;
   }

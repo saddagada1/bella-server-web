@@ -9,8 +9,8 @@ export async function sendEmail(to: string, subject: string, html: string) {
     port: 587,
     secure: false, // true for 465, false for other ports
     auth: {
-      user: "u56mnglyhhnexaek@ethereal.email",
-      pass: "CtXtwcrnEqXFsH3FTk",
+      user: "c4ozg6jra7qlcfr7@ethereal.email",
+      pass: "QpASBr3emxNCQbfNrd",
     },
   });
 

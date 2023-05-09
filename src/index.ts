@@ -9,6 +9,7 @@ import { User } from "./entity/User";
 import Redis from "ioredis";
 import refreshRoute from "./routes/refreshToken";
 import cookieParser from "cookie-parser";
+import cors from "cors";
 
 const main = async () => {
   AppDataSource.initialize()
@@ -22,6 +23,17 @@ const main = async () => {
   redis.on("error", (err) => console.log("Redis Client Error", err));
 
   const app = express();
+
+  app.use(
+    cors({
+      credentials: true,
+      origin: [
+        "http://localhost:3000",
+        "http://localhost:8080/graphql",
+        "https://studio.apollographql.com",
+      ],
+    })
+  );
 
   app.use(cookieParser());
 
@@ -40,7 +52,7 @@ const main = async () => {
   });
 
   await apolloServer.start();
-  apolloServer.applyMiddleware({ app });
+  apolloServer.applyMiddleware({ app, cors: false });
 
   app.listen(8080, () => {
     console.log("express server started on port: 8080");

@@ -7,6 +7,7 @@ export type MyContext = {
   res: Response;
   redis: Redis;
   user_payload?: { user: User };
+  google_payload?: { google_email?: string };
 };
 
 export type AuthPayload = {
