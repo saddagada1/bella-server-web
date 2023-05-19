@@ -1,22 +1,8 @@
 import { MyContext } from "../utils/types";
-import {
-  Resolver,
-  Query,
-  Mutation,
-  InputType,
-  Field,
-  Arg,
-  Ctx,
-  ObjectType,
-  UseMiddleware,
-} from "type-graphql";
+import { Resolver, Query, Mutation, InputType, Field, Arg, Ctx, ObjectType, UseMiddleware } from "type-graphql";
 import argon2 from "argon2";
 import { User } from "../entity/User";
-import {
-  ACCESS_TOKEN_EXPIRES_IN,
-  FORGOT_PASSWORD_PREFIX,
-  VERIFY_EMAIL_PREFIX,
-} from "../utils/constants";
+import { ACCESS_TOKEN_EXPIRES_IN, FORGOT_PASSWORD_PREFIX, VERIFY_EMAIL_PREFIX } from "../utils/constants";
 import { sendEmail } from "../utils/sendEmail";
 import { isAuth } from "../middleware/isAuth";
 import { isGoogleAuth } from "../middleware/isGoogleAuth";
@@ -28,9 +14,23 @@ class RegisterInput {
   @Field()
   email: string;
   @Field()
+  password: string;
+  @Field()
   username: string;
   @Field()
-  password: string;
+  first_name: string;
+  @Field()
+  last_name: string;
+}
+
+@InputType()
+class RegisterWithGoogleInput {
+  @Field()
+  username: string;
+  @Field()
+  first_name: string;
+  @Field()
+  last_name: string;
 }
 
 @InputType()
@@ -44,9 +44,9 @@ class LoginInput {
 @InputType()
 class ChangePasswordInput {
   @Field()
-  oldPassword: string;
+  old_password: string;
   @Field()
-  newPassword: string;
+  new_password: string;
 }
 
 @InputType()
@@ -57,6 +57,18 @@ class ChangeForgotPasswordInput {
   token: string;
   @Field()
   password: string;
+}
+
+@InputType()
+class ChangeAboutInput {
+  @Field()
+  first_name: string;
+  @Field()
+  last_name: string;
+  @Field()
+  bio: string;
+  @Field()
+  country: string;
 }
 
 @ObjectType()
@@ -99,17 +111,16 @@ class AuthResponse {
 @Resolver()
 export class UserResolver {
   @Mutation(() => AuthResponse)
-  async register(
-    @Arg("registerOptions") registerOptions: RegisterInput,
-    @Ctx() { redis, res }: MyContext
-  ): Promise<AuthResponse> {
+  async register(@Arg("registerOptions") registerOptions: RegisterInput, @Ctx() { redis, res }: MyContext): Promise<AuthResponse> {
     const hashedPassword = await argon2.hash(registerOptions.password);
     let user;
     try {
       user = await User.create({
         email: registerOptions.email,
-        username: registerOptions.username,
         password: hashedPassword,
+        username: registerOptions.username,
+        first_name: registerOptions.first_name,
+        last_name: registerOptions.last_name,
       }).save();
     } catch (err) {
       console.log(err);
@@ -170,7 +181,7 @@ export class UserResolver {
   @Mutation(() => AuthResponse)
   @UseMiddleware(isGoogleAuth)
   async registerWithGoogle(
-    @Arg("username") username: string,
+    @Arg("registerOptions") registerOptions: RegisterWithGoogleInput,
     @Ctx() { google_payload, res }: MyContext
   ): Promise<AuthResponse> {
     const email = google_payload!.google_email;
@@ -189,8 +200,11 @@ export class UserResolver {
     try {
       user = await User.create({
         email: email,
-        username: username,
+        username: registerOptions.username,
+        first_name: registerOptions.first_name,
+        last_name: registerOptions.last_name,
         verified: true,
+        oauth_user: true,
       }).save();
     } catch (err) {
       console.error(err);
@@ -241,10 +255,7 @@ export class UserResolver {
   }
 
   @Mutation(() => AuthResponse)
-  async login(
-    @Arg("loginOptions") loginOptions: LoginInput,
-    @Ctx() { res }: MyContext
-  ): Promise<AuthResponse> {
+  async login(@Arg("loginOptions") loginOptions: LoginInput, @Ctx() { res }: MyContext): Promise<AuthResponse> {
     const user = await User.findOne({ where: { email: loginOptions.email } });
     if (!user || !user.password) {
       return {
@@ -296,8 +307,6 @@ export class UserResolver {
       };
     }
 
-    console.log("cookie set");
-
     res.cookie("qid", createRefreshToken(user), { httpOnly: true, path: "/refresh_token" });
 
     return {
@@ -311,10 +320,7 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async changeUsername(
-    @Arg("username") username: string,
-    @Ctx() { user_payload }: MyContext
-  ): Promise<UserResponse> {
+  async changeUsername(@Arg("username") username: string, @Ctx() { user_payload }: MyContext): Promise<UserResponse> {
     const duplicateUser = await User.findOne({
       where: { username: username },
     });
@@ -341,10 +347,7 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async changeEmail(
-    @Arg("email") email: string,
-    @Ctx() { user_payload }: MyContext
-  ): Promise<UserResponse> {
+  async changeEmail(@Arg("email") email: string, @Ctx() { user_payload }: MyContext): Promise<UserResponse> {
     const duplicateUser = await User.findOne({ where: { email: email } });
     if (duplicateUser) {
       return {
@@ -373,27 +376,46 @@ export class UserResolver {
     @Arg("changePasswordOptions") changePasswordOptions: ChangePasswordInput,
     @Ctx() { user_payload }: MyContext
   ): Promise<UserResponse> {
-    const isValid = await argon2.verify(
-      user_payload!.user.password!,
-      changePasswordOptions.oldPassword
-    );
-    if (!isValid) {
-      return {
-        errors: [
-          {
-            field: "oldPassword",
-            message: "Incorrect Password",
-          },
-        ],
-      };
+    if (!user_payload!.user.oauth_user) {
+      const isValid = await argon2.verify(user_payload!.user.password!, changePasswordOptions.old_password);
+      if (!isValid) {
+        return {
+          errors: [
+            {
+              field: "old_password",
+              message: "Incorrect Password",
+            },
+          ],
+        };
+      }
     }
 
-    await User.update(
-      { id: user_payload!.user.id },
-      { password: await argon2.hash(changePasswordOptions.newPassword) }
-    );
+    const result = await AppDataSource.createQueryBuilder()
+      .update(User)
+      .set({ password: await argon2.hash(changePasswordOptions.new_password), oauth_user: false })
+      .where({ id: user_payload!.user.id })
+      .returning("*")
+      .execute();
 
-    return { user: user_payload!.user };
+    return { user: result.raw[0] };
+  }
+
+  @Mutation(() => User)
+  @UseMiddleware(isAuth)
+  async changeAbout(@Arg("changeAboutOptions") changeAboutOptions: ChangeAboutInput, @Ctx() { user_payload }: MyContext): Promise<User> {
+    const result = await AppDataSource.createQueryBuilder()
+      .update(User)
+      .set({
+        first_name: changeAboutOptions.first_name,
+        last_name: changeAboutOptions.last_name,
+        bio: changeAboutOptions.bio,
+        country: changeAboutOptions.country,
+      })
+      .where({ id: user_payload!.user.id })
+      .returning("*")
+      .execute();
+
+    return result.raw[0];
   }
 
   @Mutation(() => AuthResponse)
@@ -486,10 +508,7 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async verifyEmail(
-    @Arg("token") token: string,
-    @Ctx() { user_payload, redis }: MyContext
-  ): Promise<UserResponse> {
+  async verifyEmail(@Arg("token") token: string, @Ctx() { user_payload, redis }: MyContext): Promise<UserResponse> {
     const key = VERIFY_EMAIL_PREFIX + user_payload!.user.id;
 
     const storedToken = await redis.get(key);
@@ -557,6 +576,16 @@ export class UserResolver {
     });
 
     return true;
+  }
+
+  @Query(() => User)
+  async userByUsername(@Arg("username") username: string): Promise<User> {
+    const user = await User.findOne({ where: { username: username } });
+    if (!user) {
+      throw new Error("User Not Found");
+    }
+
+    return user;
   }
 
   @Query(() => [User])

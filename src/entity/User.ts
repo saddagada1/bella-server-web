@@ -1,12 +1,5 @@
 import { Field, ObjectType } from "type-graphql";
-import {
-  BaseEntity,
-  Column,
-  CreateDateColumn,
-  Entity,
-  PrimaryGeneratedColumn,
-  UpdateDateColumn,
-} from "typeorm";
+import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
 @ObjectType()
 @Entity()
@@ -20,6 +13,10 @@ export class User extends BaseEntity {
   verified!: boolean;
 
   @Field()
+  @Column({ default: false })
+  oauth_user!: boolean;
+
+  @Field()
   @Column("citext", { unique: true })
   email!: string;
 
@@ -30,8 +27,25 @@ export class User extends BaseEntity {
   @Column({ nullable: true })
   password?: string;
 
+  @Field()
   @Column({ default: 0 })
   token_version!: number;
+
+  @Field()
+  @Column()
+  first_name!: string;
+
+  @Field()
+  @Column()
+  last_name!: string;
+
+  @Field()
+  @Column({ default: "" })
+  bio!: string;
+
+  @Field()
+  @Column({ default: "" })
+  country!: string;
 
   @Field(() => String)
   @CreateDateColumn()
