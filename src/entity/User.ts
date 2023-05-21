@@ -1,5 +1,14 @@
 import { Field, ObjectType } from "type-graphql";
-import { BaseEntity, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import {
+  BaseEntity,
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from "typeorm";
+import { Product } from "./Product";
 
 @ObjectType()
 @Entity()
@@ -46,6 +55,9 @@ export class User extends BaseEntity {
   @Field()
   @Column({ default: "" })
   country!: string;
+
+  @OneToMany(() => Product, (product) => product.creator)
+  products: Product[];
 
   @Field(() => String)
   @CreateDateColumn()

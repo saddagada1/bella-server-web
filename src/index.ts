@@ -10,6 +10,7 @@ import Redis from "ioredis";
 import refreshRoute from "./routes/refreshToken";
 import cookieParser from "cookie-parser";
 import cors from "cors";
+import { ProductResolver } from "./resolvers/product";
 
 const main = async () => {
   AppDataSource.initialize()
@@ -27,7 +28,11 @@ const main = async () => {
   app.use(
     cors({
       credentials: true,
-      origin: ["http://localhost:3000", "http://localhost:8080/graphql", "https://studio.apollographql.com"],
+      origin: [
+        "http://localhost:3000",
+        "http://localhost:8080/graphql",
+        "https://studio.apollographql.com",
+      ],
     })
   );
 
@@ -41,14 +46,12 @@ const main = async () => {
 
   const apolloServer = new ApolloServer({
     schema: await buildSchema({
-      resolvers: [UserResolver],
-      validate: false,
+      resolvers: [UserResolver, ProductResolver],
     }),
     context: ({ req, res }) => ({ req, res, redis }),
   });
 
   await apolloServer.start();
-
   apolloServer.applyMiddleware({ app, cors: false });
 
   app.listen(8080, () => {

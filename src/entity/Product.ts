@@ -1,5 +1,14 @@
 import { Field, ObjectType } from "type-graphql";
-import { BaseEntity, Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import {
+  BaseEntity,
+  Column,
+  CreateDateColumn,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  UpdateDateColumn,
+} from "typeorm";
 import { User } from "./User";
 
 @ObjectType()
@@ -8,6 +17,10 @@ export class Product extends BaseEntity {
   @Field()
   @PrimaryGeneratedColumn()
   id!: number;
+
+  @Field(() => [String])
+  @Column("text", { array: true })
+  images!: string[];
 
   @Field()
   @Column()
@@ -38,26 +51,26 @@ export class Product extends BaseEntity {
   quantity!: number;
 
   @Field()
-  @Column({ nullable: true })
-  size?: string;
+  @Column()
+  size!: string;
 
-  @Field()
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   designer?: string;
 
-  @Field()
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   colour?: string;
 
-  @Field()
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   source?: string;
 
-  @Field()
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   era?: string;
 
-  @Field()
+  @Field(() => String, { nullable: true })
   @Column({ nullable: true })
   style?: string;
 
@@ -85,13 +98,18 @@ export class Product extends BaseEntity {
   @Column()
   price!: number;
 
-  //   @Field()
-  //   @Column()
-  //   creator_id!: number;
+  @Field()
+  @Column()
+  sold!: boolean;
 
-  //   @ManyToOne(() => User, (user) => user.remasters)
-  //   @JoinColumn({ name: "creator_id" })
-  //   creator!: User;
+  @Field()
+  @Column()
+  creator_id!: number;
+
+  @Field(() => User)
+  @ManyToOne(() => User, (user) => user.products)
+  @JoinColumn({ name: "creator_id" })
+  creator!: User;
 
   @Field(() => String)
   @CreateDateColumn()
