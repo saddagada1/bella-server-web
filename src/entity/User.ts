@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from "typeorm";
 import { Product } from "./Product";
+import { Subscription } from "./Subscription";
 
 @ObjectType()
 @Entity()
@@ -56,8 +57,17 @@ export class User extends BaseEntity {
   @Column({ default: "" })
   country!: string;
 
+  @Field(() => [Product])
   @OneToMany(() => Product, (product) => product.creator)
   products: Product[];
+
+  @Field(() => [Subscription])
+  @OneToMany(() => Subscription, (subscription) => subscription.subscriber)
+  subscriptions: Subscription[];
+
+  @Field(() => [Subscription])
+  @OneToMany(() => Subscription, (subscription) => subscription.subscribedTo)
+  subscribers: Subscription[];
 
   @Field(() => String)
   @CreateDateColumn()
