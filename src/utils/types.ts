@@ -6,7 +6,7 @@ export type MyContext = {
   req: Request;
   res: Response;
   redis: Redis;
-  user_payload?: { user: User };
+  user_payload?: { id: number; user: User };
   google_payload?: { google_email?: string };
 };
 

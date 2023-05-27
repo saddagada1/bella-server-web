@@ -11,6 +11,8 @@ import refreshRoute from "./routes/refreshToken";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { ProductResolver } from "./resolvers/product";
+import { CartResolver } from "./resolvers/cart";
+import { StoreResolver } from "./resolvers/store";
 
 const main = async () => {
   AppDataSource.initialize()
@@ -46,7 +48,7 @@ const main = async () => {
 
   const apolloServer = new ApolloServer({
     schema: await buildSchema({
-      resolvers: [UserResolver, ProductResolver],
+      resolvers: [UserResolver, ProductResolver, CartResolver, StoreResolver],
     }),
     context: ({ req, res }) => ({ req, res, redis }),
   });

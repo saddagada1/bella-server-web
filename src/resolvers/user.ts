@@ -1,13 +1,29 @@
 import { MyContext } from "../utils/types";
-import { Resolver, Query, Mutation, InputType, Field, Arg, Ctx, ObjectType, UseMiddleware } from "type-graphql";
+import {
+  Resolver,
+  Query,
+  Mutation,
+  InputType,
+  Field,
+  Arg,
+  Ctx,
+  ObjectType,
+  UseMiddleware,
+} from "type-graphql";
 import argon2 from "argon2";
 import { User } from "../entity/User";
-import { ACCESS_TOKEN_EXPIRES_IN, FORGOT_PASSWORD_PREFIX, VERIFY_EMAIL_PREFIX } from "../utils/constants";
+import {
+  ACCESS_TOKEN_EXPIRES_IN,
+  FORGOT_PASSWORD_PREFIX,
+  VERIFY_EMAIL_PREFIX,
+} from "../utils/constants";
 import { sendEmail } from "../utils/sendEmail";
 import { isAuth } from "../middleware/isAuth";
 import { isGoogleAuth } from "../middleware/isGoogleAuth";
 import { AppDataSource } from "../data-source";
 import { createAccessToken, createRefreshToken, generateOTP } from "../utils/auth";
+import { Follow } from "../entity/Follow";
+import { getProductImage } from "../utils/s3";
 
 @InputType()
 class RegisterInput {
@@ -67,8 +83,6 @@ class ChangeAboutInput {
   last_name: string;
   @Field()
   bio: string;
-  @Field()
-  country: string;
 }
 
 @ObjectType()
@@ -111,7 +125,10 @@ class AuthResponse {
 @Resolver()
 export class UserResolver {
   @Mutation(() => AuthResponse)
-  async register(@Arg("registerOptions") registerOptions: RegisterInput, @Ctx() { redis, res }: MyContext): Promise<AuthResponse> {
+  async register(
+    @Arg("registerOptions") registerOptions: RegisterInput,
+    @Ctx() { redis, res }: MyContext
+  ): Promise<AuthResponse> {
     const hashedPassword = await argon2.hash(registerOptions.password);
     let user;
     try {
@@ -216,18 +233,11 @@ export class UserResolver {
                 field: "username",
                 message: `Username Taken`,
               },
-            ],
+            ], //
           };
         }
         if (err.detail.includes("email")) {
-          return {
-            errors: [
-              {
-                field: "username",
-                message: `Email in Use`,
-              },
-            ],
-          };
+          user = await User.findOne({ where: { email: google_payload!.google_email } });
         }
       }
     }
@@ -255,7 +265,10 @@ export class UserResolver {
   }
 
   @Mutation(() => AuthResponse)
-  async login(@Arg("loginOptions") loginOptions: LoginInput, @Ctx() { res }: MyContext): Promise<AuthResponse> {
+  async login(
+    @Arg("loginOptions") loginOptions: LoginInput,
+    @Ctx() { res }: MyContext
+  ): Promise<AuthResponse> {
     const user = await User.findOne({ where: { email: loginOptions.email } });
     if (!user || !user.password) {
       return {
@@ -320,7 +333,10 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async changeUsername(@Arg("username") username: string, @Ctx() { user_payload }: MyContext): Promise<UserResponse> {
+  async changeUsername(
+    @Arg("username") username: string,
+    @Ctx() { user_payload }: MyContext
+  ): Promise<UserResponse> {
     const duplicateUser = await User.findOne({
       where: { username: username },
     });
@@ -338,7 +354,7 @@ export class UserResolver {
     const result = await AppDataSource.createQueryBuilder()
       .update(User)
       .set({ username: username })
-      .where({ id: user_payload!.user.id })
+      .where({ id: user_payload!.id })
       .returning("*")
       .execute();
 
@@ -347,7 +363,10 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async changeEmail(@Arg("email") email: string, @Ctx() { user_payload }: MyContext): Promise<UserResponse> {
+  async changeEmail(
+    @Arg("email") email: string,
+    @Ctx() { user_payload }: MyContext
+  ): Promise<UserResponse> {
     const duplicateUser = await User.findOne({ where: { email: email } });
     if (duplicateUser) {
       return {
@@ -363,7 +382,7 @@ export class UserResolver {
     const result = await AppDataSource.createQueryBuilder()
       .update(User)
       .set({ email: email })
-      .where({ id: user_payload!.user.id })
+      .where({ id: user_payload!.id })
       .returning("*")
       .execute();
 
@@ -376,8 +395,13 @@ export class UserResolver {
     @Arg("changePasswordOptions") changePasswordOptions: ChangePasswordInput,
     @Ctx() { user_payload }: MyContext
   ): Promise<UserResponse> {
-    if (!user_payload!.user.oauth_user) {
-      const isValid = await argon2.verify(user_payload!.user.password!, changePasswordOptions.old_password);
+    const user = await User.findOne({ where: { id: user_payload!.id } });
+    if (!user) {
+      throw new Error("User Not Found");
+    }
+
+    if (!user.oauth_user) {
+      const isValid = await argon2.verify(user.password!, changePasswordOptions.old_password);
       if (!isValid) {
         return {
           errors: [
@@ -393,7 +417,7 @@ export class UserResolver {
     const result = await AppDataSource.createQueryBuilder()
       .update(User)
       .set({ password: await argon2.hash(changePasswordOptions.new_password), oauth_user: false })
-      .where({ id: user_payload!.user.id })
+      .where({ id: user_payload!.id })
       .returning("*")
       .execute();
 
@@ -402,16 +426,18 @@ export class UserResolver {
 
   @Mutation(() => User)
   @UseMiddleware(isAuth)
-  async changeAbout(@Arg("changeAboutOptions") changeAboutOptions: ChangeAboutInput, @Ctx() { user_payload }: MyContext): Promise<User> {
+  async changeAbout(
+    @Arg("changeAboutOptions") changeAboutOptions: ChangeAboutInput,
+    @Ctx() { user_payload }: MyContext
+  ): Promise<User> {
     const result = await AppDataSource.createQueryBuilder()
       .update(User)
       .set({
         first_name: changeAboutOptions.first_name,
         last_name: changeAboutOptions.last_name,
         bio: changeAboutOptions.bio,
-        country: changeAboutOptions.country,
       })
-      .where({ id: user_payload!.user.id })
+      .where({ id: user_payload!.id })
       .returning("*")
       .execute();
 
@@ -508,8 +534,11 @@ export class UserResolver {
 
   @Mutation(() => UserResponse)
   @UseMiddleware(isAuth)
-  async verifyEmail(@Arg("token") token: string, @Ctx() { user_payload, redis }: MyContext): Promise<UserResponse> {
-    const key = VERIFY_EMAIL_PREFIX + user_payload!.user.id;
+  async verifyEmail(
+    @Arg("token") token: string,
+    @Ctx() { user_payload, redis }: MyContext
+  ): Promise<UserResponse> {
+    const key = VERIFY_EMAIL_PREFIX + user_payload!.id;
 
     const storedToken = await redis.get(key);
     if (!storedToken) {
@@ -537,7 +566,7 @@ export class UserResolver {
     const result = await AppDataSource.createQueryBuilder()
       .update(User)
       .set({ verified: true })
-      .where({ id: user_payload!.user.id })
+      .where({ id: user_payload!.id })
       .returning("*")
       .execute();
 
@@ -549,7 +578,13 @@ export class UserResolver {
   @Mutation(() => Boolean)
   @UseMiddleware(isAuth)
   async sendVerifyEmail(@Ctx() { user_payload, redis }: MyContext) {
-    const key = VERIFY_EMAIL_PREFIX + user_payload!.user.id;
+    const user = await User.findOne({ where: { id: user_payload!.id } });
+
+    if (!user) {
+      throw new Error("User Not Found");
+    }
+
+    const key = VERIFY_EMAIL_PREFIX + user_payload!.id;
 
     const duplicate = await redis.exists(key);
 
@@ -563,7 +598,7 @@ export class UserResolver {
 
     const emailBody = `Your Token is: ${token}`;
 
-    sendEmail(user_payload!.user.email, "REMASTER - VERIFY EMAIL", emailBody);
+    sendEmail(user.email, "REMASTER - VERIFY EMAIL", emailBody);
 
     return true;
   }
@@ -578,19 +613,65 @@ export class UserResolver {
     return true;
   }
 
+  @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
+  async follow(@Arg("id") id: number, @Ctx() { user_payload }: MyContext) {
+    try {
+      await Follow.insert({
+        followed_by_id: user_payload!.id,
+        followed_id: id,
+      });
+    } catch (err) {
+      console.log(err);
+      if (err.code === "23505") {
+        if (err.detail.includes("already exists")) {
+          await Follow.delete({ followed_by_id: user_payload!.id, followed_id: id });
+        }
+      }
+    }
+
+    return true;
+  }
+
   @Query(() => User)
   async userByUsername(@Arg("username") username: string): Promise<User> {
-    const user = await User.findOne({ where: { username: username } });
+    const user = await User.findOne({
+      where: { username: username },
+      relations: { store: { products: true }, following: true, followers: true },
+    });
     if (!user) {
       throw new Error("User Not Found");
+    }
+
+    if (user.store) {
+      for (const product of user.store.products) {
+        const image = await getProductImage(product.images[0]);
+        product.images = [image];
+      }
     }
 
     return user;
   }
 
-  @Query(() => [User])
-  @UseMiddleware(isAuth)
-  users(): Promise<User[]> {
-    return User.find();
-  }
+  // @Query(() => [Follow])
+  // async userFollowing(@Arg("id") id: number): Promise<Follow[]> {
+  //   return Follow.find({
+  //     where: { user_id: id },
+  //     relations: { followed_by: true },
+  //   });
+  // }
+
+  // @Query(() => [Follow])
+  // async userFollowers(@Arg("id") id: number): Promise<Follow[]> {
+  //   return Follow.find({
+  //     where: { followed_id: id },
+  //     relations: { followed_user: true },
+  //   });
+  // }
+
+  // @Query(() => [User])
+  // @UseMiddleware(isAuth)
+  // users(): Promise<User[]> {
+  //   return User.find();
+  // }
 }

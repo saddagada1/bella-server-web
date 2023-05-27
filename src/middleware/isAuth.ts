@@ -23,7 +23,7 @@ export const isAuth: MiddlewareFn<MyContext> = async ({ context }, next) => {
     if (user.token_version !== authPayload.token_version) {
       throw "Not Authenticated";
     }
-    context.user_payload = { user };
+    context.user_payload = { id: user.id, user: user };
   } catch (err) {
     console.error(err);
     throw new Error("Not Authenticated");

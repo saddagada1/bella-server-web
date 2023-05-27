@@ -6,10 +6,13 @@ import {
   Entity,
   JoinColumn,
   ManyToOne,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from "typeorm";
-import { User } from "./User";
+import { Like } from "./Like";
+import { CartItem } from "./CartItem";
+import { Store } from "./Store";
 
 @ObjectType()
 @Entity()
@@ -104,12 +107,20 @@ export class Product extends BaseEntity {
 
   @Field()
   @Column()
-  creator_id!: number;
+  store_id!: number;
 
-  @Field(() => User)
-  @ManyToOne(() => User, (user) => user.products)
-  @JoinColumn({ name: "creator_id" })
-  creator!: User;
+  @Field(() => Store)
+  @ManyToOne(() => Store, (store) => store.products)
+  @JoinColumn({ name: "store_id" })
+  store!: Store;
+
+  @Field(() => [CartItem])
+  @OneToMany(() => CartItem, (cart_item) => cart_item.product)
+  cart_items!: CartItem[];
+
+  @Field(() => [Like])
+  @OneToMany(() => Like, (like) => like.product)
+  likes!: Like[];
 
   @Field(() => String)
   @CreateDateColumn()

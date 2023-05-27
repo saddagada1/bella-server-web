@@ -12,12 +12,10 @@ export const isGoogleAuth: MiddlewareFn<MyContext> = async ({ context }, next) =
   try {
     const authorization = context.req.headers.authorization;
     if (!authorization) {
-      console.log("1");
       throw "Not Authenticated With Google";
     }
     const authRegex = /^Basic/;
     if (!authRegex.test(authorization) || authorization.split(" ").length !== 2) {
-      console.log("s");
       throw "Not Authenticated With Google";
     }
     const code = authorization.split(" ")[1];

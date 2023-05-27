@@ -10,24 +10,12 @@ import {
   Field,
   ObjectType,
 } from "type-graphql";
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { MyContext } from "../utils/types";
 import { isAuth } from "../middleware/isAuth";
 import { randomBytes } from "../utils/rand";
-
-const s3 = new S3Client({
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY!,
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
-  },
-  region: process.env.S3_REGION!,
-});
+import { deleteProductImages, getProductImages, uploadProductImages } from "../utils/s3";
+import { Like } from "../entity/Like";
+import { User } from "../entity/User";
 
 @InputType()
 class CreateProductInput {
@@ -84,48 +72,22 @@ class CreateProductResponse {
 @Resolver()
 export class ProductResolver {
   @Query(() => [Product])
-  Products(): Promise<Product[]> {
+  products(): Promise<Product[]> {
     return Product.find();
   }
 
   @Query(() => Product)
-  async Product(@Arg("id") id: number): Promise<Product> {
-    const product = await Product.findOne({ where: { id: id }, relations: { creator: true } });
+  async product(@Arg("id") id: number): Promise<Product> {
+    const product = await Product.findOne({
+      where: { id: id },
+      relations: { store: { user: true }, likes: true },
+    });
     if (!product) {
       throw new Error("Product Not Found");
     }
-    const get_params = product.images.map((name) => ({
-      Bucket: process.env.S3_NAME!,
-      Key: name,
-    }));
-    const get_commands = get_params.map((params) => new GetObjectCommand(params));
-    const get_signed_urls = get_commands.map(
-      async (command) => await getSignedUrl(s3, command, { expiresIn: 3600 })
-    );
-    product.images = await Promise.all(get_signed_urls);
+    product.images = await getProductImages(product.images);
 
     return product;
-  }
-
-  @Query(() => [Product])
-  async userProducts(@Arg("user_id") user_id: number): Promise<Product[]> {
-    const products = await Product.find({
-      where: { creator_id: user_id },
-    });
-
-    for (const product of products) {
-      const get_params = product.images.map((name) => ({
-        Bucket: process.env.S3_NAME!,
-        Key: name,
-      }));
-      const get_commands = get_params.map((params) => new GetObjectCommand(params));
-      const get_signed_urls = get_commands.map(
-        async (command) => await getSignedUrl(s3, command, { expiresIn: 3600 })
-      );
-      product.images = await Promise.all(get_signed_urls);
-    }
-
-    return products;
   }
 
   @Mutation(() => CreateProductResponse)
@@ -134,6 +96,10 @@ export class ProductResolver {
     @Arg("ProductInput") ProductInput: CreateProductInput,
     @Ctx() { user_payload }: MyContext
   ): Promise<CreateProductResponse> {
+    const store = await User.findOne({ where: { id: user_payload!.id } });
+    if (!store) {
+      throw new Error("No Store Initialized");
+    }
     const image_names = Array(ProductInput.num_of_images)
       .fill(null)
       .map(() => randomBytes());
@@ -141,18 +107,10 @@ export class ProductResolver {
     const product = await Product.create({
       ...rest,
       images: image_names,
-      creator_id: user_payload!.user.id,
+      store_id: store.id,
       sold: false,
     }).save();
-    const upload_params = image_names.map((name) => ({
-      Bucket: process.env.S3_NAME!,
-      Key: name,
-    }));
-    const upload_commands = upload_params.map((params) => new PutObjectCommand(params));
-    const upload_signed_urls = upload_commands.map(
-      async (command) => await getSignedUrl(s3, command, { expiresIn: 60 })
-    );
-    const upload_urls = await Promise.all(upload_signed_urls);
+    const upload_urls = await uploadProductImages(image_names);
     return {
       id: product.id,
       upload_urls: upload_urls,
@@ -175,19 +133,34 @@ export class ProductResolver {
   // }
 
   @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
   async deleteProduct(@Arg("id") id: number): Promise<Boolean> {
     const product = await Product.findOne({ where: { id: id } });
     if (!product) {
       throw new Error("Product Not Found");
     }
-    const delete_params = product.images.map((name) => ({
-      Bucket: process.env.S3_NAME!,
-      Key: name,
-    }));
-    const delete_commands = delete_params.map((params) => new DeleteObjectCommand(params));
-    const delete_images = delete_commands.map(async (command) => await s3.send(command));
-    await Promise.all(delete_images);
+    await deleteProductImages(product.images);
     await Product.delete(id);
+    return true;
+  }
+
+  @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
+  async like(@Arg("id") id: number, @Ctx() { user_payload }: MyContext): Promise<Boolean> {
+    try {
+      await Like.insert({
+        user_id: user_payload!.id,
+        product_id: id,
+      });
+    } catch (err) {
+      console.log(err);
+      if (err.code === "23505") {
+        if (err.detail.includes("already exists")) {
+          await Like.delete({ user_id: user_payload!.id, product_id: id });
+        }
+      }
+    }
+
     return true;
   }
 }
