@@ -1,13 +1,5 @@
 import { Field, ObjectType } from "type-graphql";
-import {
-  Entity,
-  BaseEntity,
-  PrimaryColumn,
-  PrimaryGeneratedColumn,
-  JoinColumn,
-  Column,
-  ManyToOne,
-} from "typeorm";
+import { Entity, BaseEntity, PrimaryGeneratedColumn, JoinColumn, Column, ManyToOne } from "typeorm";
 import { User } from "./User";
 
 @ObjectType()
@@ -50,7 +42,7 @@ export class Address extends BaseEntity {
   country!: string;
 
   @Field()
-  @PrimaryColumn()
+  @Column()
   user_id!: number;
 
   @Field(() => User)

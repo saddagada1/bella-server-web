@@ -9,22 +9,30 @@ import {
   Column,
 } from "typeorm";
 import { User } from "./User";
-import { CartItem } from "./CartItem";
 import { Store } from "./Store";
+import { OrderItem } from "./OrderItem";
 
 @ObjectType()
 @Entity()
-export class Cart extends BaseEntity {
+export class Order extends BaseEntity {
   @Field()
   @PrimaryGeneratedColumn()
   id!: number;
 
   @Field()
   @Column()
+  payment_status!: string;
+
+  @Field()
+  @Column()
+  order_status!: string;
+
+  @Field()
+  @Column()
   store_id!: number;
 
   @Field(() => Store)
-  @ManyToOne(() => Store, (store) => store.carts)
+  @ManyToOne(() => Store, (store) => store.orders)
   @JoinColumn({ name: "store_id" })
   store!: Store;
 
@@ -33,11 +41,11 @@ export class Cart extends BaseEntity {
   user_id!: number;
 
   @Field(() => User)
-  @ManyToOne(() => User, (user) => user.carts)
+  @ManyToOne(() => User, (user) => user.orders)
   @JoinColumn({ name: "user_id" })
   user!: User;
 
-  @Field(() => [CartItem])
-  @OneToMany(() => CartItem, (cart_item) => cart_item.cart)
-  cart_items!: CartItem[];
+  @Field(() => [OrderItem])
+  @OneToMany(() => OrderItem, (order_item) => order_item.order)
+  order_items!: OrderItem[];
 }

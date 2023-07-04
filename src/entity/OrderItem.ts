@@ -1,11 +1,11 @@
 import { Field, ObjectType } from "type-graphql";
 import { Entity, BaseEntity, PrimaryGeneratedColumn, JoinColumn, ManyToOne, Column } from "typeorm";
 import { Product } from "./Product";
-import { Cart } from "./Cart";
+import { Order } from "./Order";
 
 @ObjectType()
 @Entity()
-export class CartItem extends BaseEntity {
+export class OrderItem extends BaseEntity {
   @Field()
   @PrimaryGeneratedColumn()
   id!: number;
@@ -35,16 +35,16 @@ export class CartItem extends BaseEntity {
   product_id!: number;
 
   @Field(() => Product)
-  @ManyToOne(() => Product, (product) => product.cart_items)
+  @ManyToOne(() => Product, (product) => product.order_items)
   @JoinColumn({ name: "product_id" })
   product!: Product;
 
   @Field()
   @Column()
-  cart_id!: number;
+  order_id!: number;
 
-  @Field(() => Cart)
-  @ManyToOne(() => Cart, (cart) => cart.cart_items)
-  @JoinColumn({ name: "cart_id" })
-  cart!: Cart;
+  @Field(() => Order)
+  @ManyToOne(() => Order, (order) => order.order_items)
+  @JoinColumn({ name: "order_id" })
+  order!: Order;
 }

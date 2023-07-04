@@ -1,22 +1,11 @@
-import {
-  Resolver,
-  Query,
-  Mutation,
-  Ctx,
-  UseMiddleware,
-  ObjectType,
-  Field,
-  InputType,
-  Arg,
-} from "type-graphql";
+import { Resolver, Query, Mutation, Ctx, UseMiddleware, Field, InputType, Arg } from "type-graphql";
 import { MyContext } from "../utils/types";
 import { isAuth } from "../middleware/isAuth";
 import { Store } from "../entity/Store";
 import { AppDataSource } from "../data-source";
 import { User } from "../entity/User";
-import Stripe from "stripe";
-
-const stripe = new Stripe(process.env.STRIPE_CLIENT_SECRET!, { apiVersion: "2022-11-15" });
+import { getProductImage } from "../utils/s3";
+import { stripe } from "../utils/stripe";
 
 @InputType()
 class CreateStoreInput {
@@ -47,7 +36,7 @@ export class StoreResolver {
     @Ctx() { user_payload }: MyContext
   ): Promise<Store> {
     const stripe_account = await stripe.accounts.create({
-      type: "standard",
+      type: "express",
       country: createStoreInput.country,
     });
 
@@ -67,22 +56,6 @@ export class StoreResolver {
     return store;
   }
 
-  @Mutation(() => Store)
-  @UseMiddleware(isAuth)
-  async setStripeAccountStatus(
-    @Arg("stripe_account_status") stripe_account_status: boolean,
-    @Ctx() { user_payload }: MyContext
-  ): Promise<Store> {
-    const result = await AppDataSource.createQueryBuilder()
-      .update(Store)
-      .set({ stripe_setup: stripe_account_status })
-      .where({ user_id: user_payload!.id })
-      .returning("*")
-      .execute();
-
-    return result.raw[0];
-  }
-
   @Query(() => String)
   @UseMiddleware(isAuth)
   async stripeAccountLink(@Ctx() { user_payload }: MyContext): Promise<String> {
@@ -92,7 +65,7 @@ export class StoreResolver {
     }
 
     const accountLink = await stripe.accountLinks.create({
-      account: `{{${store.stripe_account_id}}}`,
+      account: store.stripe_account_id,
       refresh_url: "http://localhost:3000/store",
       return_url: "http://localhost:3000/store",
       type: "account_onboarding",
@@ -104,10 +77,42 @@ export class StoreResolver {
   @Query(() => Store)
   @UseMiddleware(isAuth)
   async store(@Ctx() { user_payload }: MyContext): Promise<Store> {
-    const store = await Store.findOne({ where: { user_id: user_payload!.id } });
+    const store = await Store.findOne({
+      where: { user_id: user_payload!.id },
+      relations: { products: true },
+    });
     if (!store) {
       throw new Error("Store Not Found");
     }
+
+    // should be a webhook
+    if (!store.stripe_setup) {
+      const stripe_account = await stripe.accounts.retrieve({
+        stripeAccount: store.stripe_account_id,
+      });
+
+      if (stripe_account.charges_enabled && stripe_account.details_submitted) {
+        const result = await AppDataSource.createQueryBuilder()
+          .update(Store)
+          .set({ stripe_setup: true })
+          .where({ user_id: user_payload!.id })
+          .returning("*")
+          .execute();
+
+        for (const product of result.raw[0].products) {
+          const image = await getProductImage(product.images[0]);
+          product.images = [image];
+        }
+
+        return result.raw[0];
+      }
+    }
+
+    for (const product of store.products) {
+      const image = await getProductImage(product.images[0]);
+      product.images = [image];
+    }
+
     return store;
   }
 }

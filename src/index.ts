@@ -5,7 +5,6 @@ import express from "express";
 import { ApolloServer } from "apollo-server-express";
 import { buildSchema } from "type-graphql";
 import { UserResolver } from "./resolvers/user";
-import { User } from "./entity/User";
 import Redis from "ioredis";
 import refreshRoute from "./routes/refreshToken";
 import cookieParser from "cookie-parser";
@@ -18,7 +17,6 @@ const main = async () => {
   AppDataSource.initialize()
     .then(async () => {
       console.log("connected with typeorm");
-      //await User.delete({})
     })
     .catch((error) => console.log(error));
 

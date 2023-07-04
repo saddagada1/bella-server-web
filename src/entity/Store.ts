@@ -2,7 +2,6 @@ import { Field, ObjectType } from "type-graphql";
 import {
   Entity,
   BaseEntity,
-  PrimaryColumn,
   PrimaryGeneratedColumn,
   OneToOne,
   JoinColumn,
@@ -12,6 +11,7 @@ import {
 import { User } from "./User";
 import { Product } from "./Product";
 import { Cart } from "./Cart";
+import { Order } from "./Order";
 
 @ObjectType()
 @Entity()
@@ -61,13 +61,17 @@ export class Store extends BaseEntity {
   country!: string;
 
   @Field()
-  @PrimaryColumn()
+  @Column()
   user_id!: number;
 
   @Field(() => User)
   @OneToOne(() => User, (user) => user.store)
   @JoinColumn({ name: "user_id" })
   user!: User;
+
+  @Field(() => [Order])
+  @OneToMany(() => Order, (order) => order.store)
+  orders: Order[];
 
   @Field(() => [Cart])
   @OneToMany(() => Cart, (cart) => cart.store)

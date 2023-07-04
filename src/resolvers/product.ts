@@ -9,6 +9,8 @@ import {
   InputType,
   Field,
   ObjectType,
+  FieldResolver,
+  Root,
 } from "type-graphql";
 import { MyContext } from "../utils/types";
 import { isAuth } from "../middleware/isAuth";
@@ -54,10 +56,6 @@ class CreateProductInput {
   @Field()
   shipping_price!: number;
   @Field()
-  offer_global_shipping!: boolean;
-  @Field()
-  global_shipping_price!: number;
-  @Field()
   price!: number;
 }
 
@@ -69,7 +67,7 @@ class CreateProductResponse {
   upload_urls: string[];
 }
 
-@Resolver()
+@Resolver(Product)
 export class ProductResolver {
   @Query(() => [Product])
   products(): Promise<Product[]> {
@@ -144,23 +142,38 @@ export class ProductResolver {
     return true;
   }
 
-  @Mutation(() => Boolean)
+  @FieldResolver(() => Number)
+  num_likes(@Root() product: Product) {
+    if (product.likes) {
+      return product.likes.length;
+    } else {
+      return 0;
+    }
+  }
+
+  @Mutation(() => Like)
   @UseMiddleware(isAuth)
-  async like(@Arg("id") id: number, @Ctx() { user_payload }: MyContext): Promise<Boolean> {
+  async like(@Arg("id") id: number, @Ctx() { user_payload }: MyContext): Promise<Like> {
     try {
-      await Like.insert({
-        user_id: user_payload!.id,
+      const like = await Like.create({
+        id: user_payload!.id,
         product_id: id,
-      });
+      }).save();
+      return like;
     } catch (err) {
-      console.log(err);
       if (err.code === "23505") {
         if (err.detail.includes("already exists")) {
-          await Like.delete({ user_id: user_payload!.id, product_id: id });
+          throw new Error("Product Already Liked");
         }
       }
+      throw new Error("Something Went Wrong");
     }
+  }
 
+  @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
+  async unlike(@Arg("id") id: number, @Ctx() { user_payload }: MyContext): Promise<Boolean> {
+    await Like.delete({ id: user_payload!.id, product_id: id });
     return true;
   }
 }

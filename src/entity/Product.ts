@@ -13,6 +13,7 @@ import {
 import { Like } from "./Like";
 import { CartItem } from "./CartItem";
 import { Store } from "./Store";
+import { OrderItem } from "./OrderItem";
 
 @ObjectType()
 @Entity()
@@ -91,14 +92,6 @@ export class Product extends BaseEntity {
 
   @Field()
   @Column()
-  offer_global_shipping!: boolean;
-
-  @Field()
-  @Column()
-  global_shipping_price!: number;
-
-  @Field()
-  @Column()
   price!: number;
 
   @Field()
@@ -113,6 +106,10 @@ export class Product extends BaseEntity {
   @ManyToOne(() => Store, (store) => store.products)
   @JoinColumn({ name: "store_id" })
   store!: Store;
+
+  @Field(() => [OrderItem])
+  @OneToMany(() => OrderItem, (order_item) => order_item.product)
+  order_items!: OrderItem[];
 
   @Field(() => [CartItem])
   @OneToMany(() => CartItem, (cart_item) => cart_item.product)

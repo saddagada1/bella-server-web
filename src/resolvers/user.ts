@@ -9,6 +9,8 @@ import {
   Ctx,
   ObjectType,
   UseMiddleware,
+  FieldResolver,
+  Root,
 } from "type-graphql";
 import argon2 from "argon2";
 import { User } from "../entity/User";
@@ -122,7 +124,7 @@ class AuthResponse {
   auth?: Auth;
 }
 
-@Resolver()
+@Resolver(User)
 export class UserResolver {
   @Mutation(() => AuthResponse)
   async register(
@@ -613,23 +615,47 @@ export class UserResolver {
     return true;
   }
 
-  @Mutation(() => Boolean)
+  @FieldResolver(() => Number)
+  num_followers(@Root() user: User) {
+    if (user.followers) {
+      return user.followers.length;
+    } else {
+      return 0;
+    }
+  }
+
+  @FieldResolver(() => Number)
+  num_following(@Root() user: User) {
+    if (user.following) {
+      return user.following.length;
+    } else {
+      return 0;
+    }
+  }
+
+  @Mutation(() => Follow)
   @UseMiddleware(isAuth)
-  async follow(@Arg("id") id: number, @Ctx() { user_payload }: MyContext) {
+  async follow(@Arg("id") id: number, @Ctx() { user_payload }: MyContext): Promise<Follow> {
     try {
-      await Follow.insert({
-        followed_by_id: user_payload!.id,
+      const follow = await Follow.create({
+        id: user_payload!.id,
         followed_id: id,
-      });
+      }).save();
+      return follow;
     } catch (err) {
-      console.log(err);
       if (err.code === "23505") {
         if (err.detail.includes("already exists")) {
-          await Follow.delete({ followed_by_id: user_payload!.id, followed_id: id });
+          throw new Error("User Already Followed");
         }
       }
+      throw new Error("Something Went Wrong");
     }
+  }
 
+  @Mutation(() => Boolean)
+  @UseMiddleware(isAuth)
+  async unfollow(@Arg("id") id: number, @Ctx() { user_payload }: MyContext) {
+    await Follow.delete({ id: user_payload!.id, followed_id: id });
     return true;
   }
 

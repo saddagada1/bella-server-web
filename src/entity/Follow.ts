@@ -5,7 +5,6 @@ import {
   CreateDateColumn,
   BaseEntity,
   PrimaryColumn,
-  PrimaryGeneratedColumn,
   JoinColumn,
 } from "typeorm";
 import { User } from "./User";
@@ -14,12 +13,8 @@ import { User } from "./User";
 @Entity()
 export class Follow extends BaseEntity {
   @Field()
-  @PrimaryGeneratedColumn()
-  id!: number;
-
-  @Field()
   @PrimaryColumn()
-  followed_by_id!: number;
+  id!: number;
 
   @Field()
   @PrimaryColumn()
@@ -27,7 +22,7 @@ export class Follow extends BaseEntity {
 
   @Field(() => User)
   @ManyToOne(() => User, (user) => user.following)
-  @JoinColumn({ name: "followed_by_id" })
+  @JoinColumn({ name: "id" })
   followed_by!: User;
 
   @Field(() => User)

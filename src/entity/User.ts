@@ -14,6 +14,7 @@ import { Like } from "./Like";
 import { Cart } from "./Cart";
 import { Store } from "./Store";
 import { Address } from "./Address";
+import { Order } from "./Order";
 
 @ObjectType()
 @Entity()
@@ -60,6 +61,10 @@ export class User extends BaseEntity {
   @Field(() => [Cart])
   @OneToMany(() => Cart, (cart) => cart.user)
   carts!: Cart[];
+
+  @Field(() => [Order])
+  @OneToMany(() => Order, (order) => order.user)
+  orders!: Order[];
 
   @Field(() => [Address])
   @OneToMany(() => Address, (address) => address.user)

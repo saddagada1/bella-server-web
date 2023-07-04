@@ -14,12 +14,8 @@ import { Product } from "./Product";
 @Entity()
 export class Like extends BaseEntity {
   @Field()
-  @PrimaryGeneratedColumn()
-  id!: number;
-
-  @Field()
   @PrimaryColumn()
-  user_id!: number;
+  id!: number;
 
   @Field()
   @PrimaryColumn()
@@ -27,7 +23,7 @@ export class Like extends BaseEntity {
 
   @Field(() => User)
   @ManyToOne(() => User, (user) => user.likes)
-  @JoinColumn({ name: "user_id" })
+  @JoinColumn({ name: "id" })
   user!: User;
 
   @Field(() => Product)
